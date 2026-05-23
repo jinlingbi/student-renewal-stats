@@ -62,7 +62,6 @@ els.form.addEventListener("submit", async (event) => {
 
 document.getElementById("resetForm").addEventListener("click", resetForm);
 document.getElementById("refreshData").addEventListener("click", () => loadRecords(true));
-
 document.getElementById("clearAll").addEventListener("click", async () => {
   if (!confirm("Clear all records?")) return;
   try {
@@ -191,7 +190,7 @@ function renderAll() {
 
 function getFiltered() {
   return state.records.filter((item) => {
-    const text = [item.studentId, item.lp, item.continent, item.renewType].join(" ").toLowerCase();
+    const text = [item.studentId, item.lp, item.continent, item.renewType, item.note].join(" ").toLowerCase();
     const matchesText = !state.search || text.includes(state.search);
     const matchesContinent = !state.continent || item.continent === state.continent;
     const matchesType = !state.renewType || item.renewType === state.renewType;
@@ -209,7 +208,7 @@ function renderSummary() {
   ].join("");
 
   if (!records.length) {
-    els.rows.innerHTML = `<tr><td colspan="12"><div class="empty">暂无数据</div></td></tr>`;
+    els.rows.innerHTML = `<tr><td colspan="13"><div class="empty">暂无数据</div></td></tr>`;
     return;
   }
 
@@ -225,6 +224,7 @@ function renderSummary() {
       <td>${money(item.renewPackageTotal)}</td>
       <td>${money(item.renewLessonPrice)}</td>
       <td>${plainNumber(item.extraGiftLessons)}</td>
+      <td class="note-cell">${escapeHtml(item.note || "")}</td>
       <td>${formatDate(item.updatedAt)}</td>
       <td>
         <div class="row-actions">
@@ -346,14 +346,14 @@ async function removeRecord(id) {
 
 function exportCsv() {
   const rows = [
-    ["学员ID", "学员归属LP", "归属大洲", "一续or多续", "新签课包总价", "新签课包课单价", "新签课包赠送豌豆币数量", "申请续费课包总价", "续费课包课单价", "额外加码赠课", "更新时间"]
+    ["学员ID", "学员归属LP", "归属大洲", "一续or多续", "新签课包总价", "新签课包课单价", "新签课包赠送豌豆币数量", "申请续费课包总价", "续费课包课单价", "额外加码赠课", "备注情况说明", "更新时间"]
   ];
   getFiltered().forEach((item) => {
     rows.push([
       item.studentId, item.lp, item.continent, item.renewType,
       item.newPackageTotal, item.newLessonPrice, item.newBeans,
       item.renewPackageTotal, item.renewLessonPrice, item.extraGiftLessons,
-      formatDate(item.updatedAt)
+      item.note, formatDate(item.updatedAt)
     ]);
   });
   const csv = rows.map((row) => row.map((value) => `"${String(value ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
