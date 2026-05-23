@@ -29,8 +29,15 @@
         <form class="form-grid" id="recordForm" autocomplete="off">
           <input type="hidden" name="id" />
 
-          <label><span>学员ID *</span><input name="studentId" required /></label>
-          <label><span>学员归属LP *</span><input name="lp" required /></label>
+          <label>
+            <span>学员ID *</span>
+            <input name="studentId" required />
+          </label>
+
+          <label>
+            <span>学员归属LP *</span>
+            <input name="lp" required />
+          </label>
 
           <label>
             <span>归属大洲 *</span>
@@ -54,12 +61,40 @@
             </select>
           </label>
 
-          <label><span>新签课包总价 *</span><input name="newPackageTotal" required min="0" step="0.01" type="number" /></label>
-          <label><span>新签课包课单价 *</span><input name="newLessonPrice" required min="0" step="0.01" type="number" /></label>
-          <label><span>新签课包赠送豌豆币数量 *</span><input name="newBeans" required min="0" step="1" type="number" /></label>
-          <label><span>申请续费课包总价 *</span><input name="renewPackageTotal" required min="0" step="0.01" type="number" /></label>
-          <label><span>续费课包课单价 *</span><input name="renewLessonPrice" required min="0" step="0.01" type="number" /></label>
-          <label><span>额外加码赠课</span><input name="extraGiftLessons" min="0" step="0.01" type="number" value="0" /></label>
+          <label>
+            <span>新签课包总价 *</span>
+            <input name="newPackageTotal" required min="0" step="0.01" type="number" />
+          </label>
+
+          <label>
+            <span>新签课包课单价 *</span>
+            <input name="newLessonPrice" required min="0" step="0.01" type="number" />
+          </label>
+
+          <label>
+            <span>新签课包赠送豌豆币数量 *</span>
+            <input name="newBeans" required min="0" step="1" type="number" />
+          </label>
+
+          <label>
+            <span>申请续费课包总价 *</span>
+            <input name="renewPackageTotal" required min="0" step="0.01" type="number" />
+          </label>
+
+          <label>
+            <span>续费课包课单价 *</span>
+            <input name="renewLessonPrice" required min="0" step="0.01" type="number" />
+          </label>
+
+          <label>
+            <span>额外加码赠课</span>
+            <input name="extraGiftLessons" min="0" step="0.01" type="number" value="0" />
+          </label>
+
+          <label class="field-wide">
+            <span>备注情况说明</span>
+            <textarea name="note" rows="3" placeholder="可填写特殊申请、学员情况、审批说明等"></textarea>
+          </label>
 
           <div class="form-actions">
             <button class="primary" type="submit" id="submitBtn">提交记录</button>
@@ -105,6 +140,7 @@
                 <th>续费总价</th>
                 <th>续费单价</th>
                 <th>赠课</th>
+                <th>备注情况说明</th>
                 <th>更新时间</th>
                 <th>操作</th>
               </tr>
