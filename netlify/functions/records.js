@@ -79,6 +79,7 @@ function normalizeRecord(payload) {
     id: payload.id || crypto.randomUUID(),
     studentId: clean(payload.studentId),
     lp: clean(payload.lp),
+    newSignChannel: clean(payload.newSignChannel),
     continent: clean(payload.continent),
     renewType: clean(payload.renewType),
     newPackageTotal: number(payload.newPackageTotal),
