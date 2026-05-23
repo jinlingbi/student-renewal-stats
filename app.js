@@ -1,200 +1,452 @@
-<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>学员续费信息统计</title>
-  <link rel="stylesheet" href="/styles.css" />
-</head>
-<body>
-  <div class="app">
-    <header class="topbar">
-      <div>
-        <h1>学员续费信息统计</h1>
-        <p id="syncState">正在同步</p>
-      </div>
-      <nav class="tabs" aria-label="页面切换">
-        <button class="tab is-active" type="button" data-tab="form">填写登记</button>
-        <button class="tab" type="button" data-tab="summary">数据汇总</button>
-        <button class="tab" type="button" data-tab="analysis">统计分析</button>
-      </nav>
-      <div class="top-actions">
-        <button class="ghost" id="refreshData" type="button">刷新</button>
-        <button class="ghost" id="exportCsv" type="button">导出</button>
-      </div>
-    </header>
+const API = "/api/records";
+const LOCAL_KEY = "lp_student_renewal_records_v2";
 
-    <main>
-      <section class="panel is-active" id="tab-form">
-        <form class="form-grid" id="recordForm" autocomplete="off">
-          <input type="hidden" name="id" />
+const state = {
+  records: [],
+  mode: "cloud",
+  search: "",
+  continent: "",
+  renewType: ""
+};
 
-          <label>
-            <span>学员ID *</span>
-            <input name="studentId" required />
-          </label>
+const els = {
+  sync: document.getElementById("syncState"),
+  form: document.getElementById("recordForm"),
+  submitBtn: document.getElementById("submitBtn"),
+  rows: document.getElementById("recordRows"),
+  search: document.getElementById("searchBox"),
+  continentFilter: document.getElementById("continentFilter"),
+  typeFilter: document.getElementById("typeFilter"),
+  metricRow: document.getElementById("metricRow"),
+  analysisMetricRow: document.getElementById("analysisMetricRow"),
+  typeRank: document.getElementById("typeRank"),
+  lpRank: document.getElementById("lpRank"),
+  continentStats: document.getElementById("continentStats"),
+  topRenewRecords: document.getElementById("topRenewRecords"),
+  toast: document.getElementById("toast")
+};
 
-          <label>
-            <span>学员归属LP *</span>
-            <input name="lp" required />
-          </label>
+document.querySelectorAll(".tab").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach((item) => item.classList.remove("is-active"));
+    document.querySelectorAll(".panel").forEach((item) => item.classList.remove("is-active"));
+    button.classList.add("is-active");
+    document.getElementById(`tab-${button.dataset.tab}`).classList.add("is-active");
+    if (button.dataset.tab !== "form") loadRecords(false);
+  });
+});
 
-          <label>
-            <span>新签渠道</span>
-            <input name="newSignChannel" placeholder="如转介绍、社群、活动等" />
-          </label>
+els.form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(els.form).entries());
+  data.newPackageTotal = toNumber(data.newPackageTotal);
+  data.newLessonPrice = toNumber(data.newLessonPrice);
+  data.newBeans = toNumber(data.newBeans);
+  data.renewPackageTotal = toNumber(data.renewPackageTotal);
+  data.renewLessonPrice = toNumber(data.renewLessonPrice);
+  data.extraGiftLessons = toNumber(data.extraGiftLessons);
 
-          <label>
-            <span>归属大洲 *</span>
-            <select name="continent" required>
-              <option value="">请选择</option>
-              <option>亚洲</option>
-              <option>欧洲</option>
-              <option>北美洲</option>
-              <option>南美洲</option>
-              <option>非洲</option>
-              <option>大洋洲</option>
-              <option>南极洲</option>
-            </select>
-          </label>
+  try {
+    setSync("Saving");
+    const result = await saveRecord(data);
+    state.records = result.records;
+    resetForm();
+    renderAll();
+    toast(data.id ? "Record updated" : "Record saved");
+  } catch (error) {
+    toast(error.message || "Save failed", true);
+  } finally {
+    setSync(state.mode === "cloud" ? `Synced ${formatTime(new Date())}` : "Local preview mode");
+  }
+});
 
-          <label>
-            <span>学员是【一续or多续】*</span>
-            <select name="renewType" required>
-              <option>一续</option>
-              <option>多续</option>
-            </select>
-          </label>
+document.getElementById("resetForm").addEventListener("click", resetForm);
+document.getElementById("refreshData").addEventListener("click", () => loadRecords(true));
+document.getElementById("clearAll").addEventListener("click", async () => {
+  if (!confirm("Clear all records?")) return;
+  try {
+    setSync("Clearing");
+    const result = await clearAllRecords();
+    state.records = result.records;
+    renderAll();
+    toast("All records cleared");
+  } catch (error) {
+    toast(error.message || "Clear failed", true);
+  } finally {
+    setSync(state.mode === "cloud" ? `Synced ${formatTime(new Date())}` : "Local preview mode");
+  }
+});
 
-          <label>
-            <span>新签课包总价 *</span>
-            <input name="newPackageTotal" required min="0" step="0.01" type="number" />
-          </label>
+document.getElementById("exportCsv").addEventListener("click", exportCsv);
 
-          <label>
-            <span>新签课包课单价 *</span>
-            <input name="newLessonPrice" required min="0" step="0.01" type="number" />
-          </label>
+els.search.addEventListener("input", () => {
+  state.search = els.search.value.trim().toLowerCase();
+  renderSummary();
+});
 
-          <label>
-            <span>新签课包赠送豌豆币数量 *</span>
-            <input name="newBeans" required min="0" step="1" type="number" />
-          </label>
+els.continentFilter.addEventListener("change", () => {
+  state.continent = els.continentFilter.value;
+  renderSummary();
+});
 
-          <label>
-            <span>申请续费课包总价 *</span>
-            <input name="renewPackageTotal" required min="0" step="0.01" type="number" />
-          </label>
+els.typeFilter.addEventListener("change", () => {
+  state.renewType = els.typeFilter.value;
+  renderSummary();
+});
 
-          <label>
-            <span>续费课包课单价 *</span>
-            <input name="renewLessonPrice" required min="0" step="0.01" type="number" />
-          </label>
+async function request(url, options) {
+  const response = await fetch(url, options);
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || "Request failed");
+  return body;
+}
 
-          <label>
-            <span>额外加码赠课</span>
-            <input name="extraGiftLessons" min="0" step="0.01" type="number" value="0" />
-          </label>
+async function loadRecords(showMessage) {
+  try {
+    setSync("Syncing");
+    const result = await request(API);
+    state.mode = "cloud";
+    state.records = Array.isArray(result.records) ? result.records : [];
+    renderAll();
+    setSync(`Synced ${formatTime(new Date())}`);
+    if (showMessage) toast("Data refreshed");
+  } catch {
+    state.mode = "local";
+    state.records = readLocal();
+    renderAll();
+    setSync("Local preview mode. Cloud sync works after Netlify deploy.");
+    if (showMessage) toast("Local preview mode");
+  }
+}
 
-          <label class="field-wide">
-            <span>备注情况说明</span>
-            <textarea name="note" rows="3" placeholder="可填写特殊申请、学员情况、审批说明等"></textarea>
-          </label>
+async function saveRecord(data) {
+  if (state.mode === "cloud") {
+    return await request(API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+  }
 
-          <div class="form-actions">
-            <button class="primary" type="submit" id="submitBtn">提交记录</button>
-            <button class="ghost" type="button" id="resetForm">清空</button>
-          </div>
-        </form>
-      </section>
+  const record = normalizeLocal(data);
+  const index = state.records.findIndex((item) => item.id === record.id);
+  const records = [...state.records];
+  if (index >= 0) records[index] = record;
+  else records.unshift(record);
+  writeLocal(records);
+  return { records };
+}
 
-      <section class="panel" id="tab-summary">
-        <div class="toolbar">
-          <input id="searchBox" type="search" placeholder="搜索学员ID或LP" />
-          <select id="continentFilter">
-            <option value="">全部大洲</option>
-            <option>亚洲</option>
-            <option>欧洲</option>
-            <option>北美洲</option>
-            <option>南美洲</option>
-            <option>非洲</option>
-            <option>大洋洲</option>
-            <option>南极洲</option>
-          </select>
-          <select id="typeFilter">
-            <option value="">全部类型</option>
-            <option>一续</option>
-            <option>多续</option>
-          </select>
-          <button class="danger" id="clearAll" type="button">清空全部</button>
+async function deleteRecord(id) {
+  if (state.mode === "cloud") {
+    return await request(`${API}?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  }
+
+  const records = state.records.filter((item) => item.id !== id);
+  writeLocal(records);
+  return { records };
+}
+
+async function clearAllRecords() {
+  if (state.mode === "cloud") {
+    return await request(`${API}?all=1`, { method: "DELETE" });
+  }
+  writeLocal([]);
+  return { records: [] };
+}
+
+function normalizeLocal(data) {
+  return {
+    ...data,
+    id: data.id || crypto.randomUUID(),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function readLocal() {
+  try {
+    const value = JSON.parse(localStorage.getItem(LOCAL_KEY) || "[]");
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocal(records) {
+  localStorage.setItem(LOCAL_KEY, JSON.stringify(records));
+}
+
+function resetForm() {
+  els.form.reset();
+  els.form.id.value = "";
+  els.form.extraGiftLessons.value = "0";
+  els.submitBtn.textContent = "提交记录";
+}
+
+function renderAll() {
+  renderSummary();
+  renderAnalytics();
+}
+
+function getFiltered() {
+  return state.records.filter((item) => {
+    const text = [item.studentId, item.lp, item.newSignChannel, item.continent, item.renewType, item.note].join(" ").toLowerCase();
+    const matchesText = !state.search || text.includes(state.search);
+    const matchesContinent = !state.continent || item.continent === state.continent;
+    const matchesType = !state.renewType || item.renewType === state.renewType;
+    return matchesText && matchesContinent && matchesType;
+  });
+}
+
+function renderSummary() {
+  const records = getFiltered();
+  els.metricRow.innerHTML = [
+    metric("记录数", records.length),
+    metric("申请续费总额", money(sumBy(records, "renewPackageTotal"))),
+    metric("新签总额", money(sumBy(records, "newPackageTotal"))),
+    metric("额外赠课合计", plainNumber(sumBy(records, "extraGiftLessons")))
+  ].join("");
+
+  if (!records.length) {
+    els.rows.innerHTML = `<tr><td colspan="14"><div class="empty">暂无数据</div></td></tr>`;
+    return;
+  }
+
+  els.rows.innerHTML = records.map((item) => `
+    <tr>
+      <td>${escapeHtml(item.studentId)}</td>
+      <td>${escapeHtml(item.lp)}</td>
+      <td>${escapeHtml(item.newSignChannel || "")}</td>
+      <td>${escapeHtml(item.continent)}</td>
+      <td><span class="status" data-type="${escapeHtml(item.renewType)}">${escapeHtml(item.renewType)}</span></td>
+      <td>${money(item.newPackageTotal)}</td>
+      <td>${money(item.newLessonPrice)}</td>
+      <td>${plainNumber(item.newBeans)}</td>
+      <td>${money(item.renewPackageTotal)}</td>
+      <td>${money(item.renewLessonPrice)}</td>
+      <td>${plainNumber(item.extraGiftLessons)}</td>
+      <td class="note-cell">${escapeHtml(item.note || "")}</td>
+      <td>${formatDate(item.updatedAt)}</td>
+      <td>
+        <div class="row-actions">
+          <button type="button" data-edit="${item.id}">编辑</button>
+          <button class="danger" type="button" data-delete="${item.id}">删除</button>
         </div>
+      </td>
+    </tr>
+  `).join("");
 
-        <div class="metric-row" id="metricRow"></div>
+  els.rows.querySelectorAll("[data-edit]").forEach((button) => {
+    button.addEventListener("click", () => editRecord(button.dataset.edit));
+  });
+  els.rows.querySelectorAll("[data-delete]").forEach((button) => {
+    button.addEventListener("click", () => removeRecord(button.dataset.delete));
+  });
+}
 
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>学员ID</th>
-                <th>归属LP</th>
-                <th>新签渠道</th>
-                <th>大洲</th>
-                <th>类型</th>
-                <th>新签总价</th>
-                <th>新签单价</th>
-                <th>豌豆币</th>
-                <th>续费总价</th>
-                <th>续费单价</th>
-                <th>赠课</th>
-                <th>备注情况说明</th>
-                <th>更新时间</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="recordRows"></tbody>
-          </table>
+function renderAnalytics() {
+  const records = state.records;
+  const renewTotal = sumBy(records, "renewPackageTotal");
+  const newTotal = sumBy(records, "newPackageTotal");
+  els.analysisMetricRow.innerHTML = [
+    metric("平均续费金额", money(avgBy(records, "renewPackageTotal"))),
+    metric("平均续费课单价", money(avgBy(records, "renewLessonPrice"))),
+    metric("赠送豌豆币合计", plainNumber(sumBy(records, "newBeans"))),
+    metric("续费与新签差额", money(renewTotal - newTotal))
+  ].join("");
+
+  renderRank(els.typeRank, countBy(records, "renewType"), "人");
+  renderRank(els.lpRank, amountBy(records, "lp", "renewPackageTotal"), "", money);
+  renderContinentStats(records);
+  renderTopRenew(records);
+}
+
+function renderContinentStats(records) {
+  const grouped = groupBy(records, "continent");
+  const rows = Object.entries(grouped)
+    .map(([continent, list]) => ({
+      continent,
+      count: list.length,
+      renewTotal: sumBy(list, "renewPackageTotal"),
+      avgRenew: avgBy(list, "renewPackageTotal"),
+      avgLesson: avgBy(list, "renewLessonPrice"),
+      gift: sumBy(list, "extraGiftLessons")
+    }))
+    .sort((a, b) => b.renewTotal - a.renewTotal);
+
+  els.continentStats.innerHTML = rows.length
+    ? rows.map((item) => `
+        <tr>
+          <td>${escapeHtml(item.continent)}</td>
+          <td>${plainNumber(item.count)}</td>
+          <td>${money(item.renewTotal)}</td>
+          <td>${money(item.avgRenew)}</td>
+          <td>${money(item.avgLesson)}</td>
+          <td>${plainNumber(item.gift)}</td>
+        </tr>
+      `).join("")
+    : `<tr><td colspan="6"><div class="empty">暂无数据</div></td></tr>`;
+}
+
+function renderTopRenew(records) {
+  const top = [...records]
+    .sort((a, b) => Number(b.renewPackageTotal || 0) - Number(a.renewPackageTotal || 0))
+    .slice(0, 6);
+
+  els.topRenewRecords.innerHTML = top.length
+    ? top.map((item) => `
+        <div class="highlight">
+          <strong>${escapeHtml(item.studentId)} · ${money(item.renewPackageTotal)}</strong>
+          <span>${escapeHtml(item.lp)} / ${escapeHtml(item.continent)} / ${escapeHtml(item.renewType)} / 赠课 ${plainNumber(item.extraGiftLessons)}</span>
         </div>
-      </section>
+      `).join("")
+    : `<div class="empty">暂无数据</div>`;
+}
 
-      <section class="panel" id="tab-analysis">
-        <div class="metric-row" id="analysisMetricRow"></div>
-        <div class="analysis-grid">
-          <section class="card">
-            <h2>续费类型分布</h2>
-            <div class="rank-list" id="typeRank"></div>
-          </section>
-          <section class="card">
-            <h2>LP 续费金额排行</h2>
-            <div class="rank-list" id="lpRank"></div>
-          </section>
-          <section class="card wide">
-            <h2>大洲表现</h2>
-            <div class="table-wrap small">
-              <table>
-                <thead>
-                  <tr>
-                    <th>大洲</th>
-                    <th>记录数</th>
-                    <th>续费总额</th>
-                    <th>平均续费金额</th>
-                    <th>平均续费单价</th>
-                    <th>赠课合计</th>
-                  </tr>
-                </thead>
-                <tbody id="continentStats"></tbody>
-              </table>
-            </div>
-          </section>
-          <section class="card">
-            <h2>高额续费记录</h2>
-            <div class="highlight-list" id="topRenewRecords"></div>
-          </section>
-        </div>
-      </section>
-    </main>
-  </div>
+function renderRank(container, data, unit, formatter = plainNumber) {
+  const entries = Object.entries(data).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 8);
+  if (!entries.length) {
+    container.innerHTML = `<div class="empty">暂无数据</div>`;
+    return;
+  }
+  const max = Math.max(...entries.map((item) => item[1]), 1);
+  container.innerHTML = entries.map(([name, count]) => `
+    <div class="bar">
+      <div class="bar-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.max((count / max) * 100, 4)}%"></div></div>
+      <div class="bar-value">${formatter(count)}${unit}</div>
+    </div>
+  `).join("");
+}
 
-  <div class="toast" id="toast"></div>
-  <script src="/app.js"></script>
-</body>
-</html>
+function editRecord(id) {
+  const record = state.records.find((item) => item.id === id);
+  if (!record) return;
+  Object.entries(record).forEach(([key, value]) => {
+    if (els.form.elements[key]) els.form.elements[key].value = value ?? "";
+  });
+  els.submitBtn.textContent = "更新记录";
+  document.querySelector('[data-tab="form"]').click();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+async function removeRecord(id) {
+  if (!confirm("删除这条记录？")) return;
+  try {
+    setSync("Deleting");
+    const result = await deleteRecord(id);
+    state.records = result.records;
+    renderAll();
+    toast("Record deleted");
+  } catch (error) {
+    toast(error.message || "Delete failed", true);
+  } finally {
+    setSync(state.mode === "cloud" ? `Synced ${formatTime(new Date())}` : "Local preview mode");
+  }
+}
+
+function exportCsv() {
+  const rows = [
+    ["学员ID", "学员归属LP", "新签渠道", "归属大洲", "一续or多续", "新签课包总价", "新签课包课单价", "新签课包赠送豌豆币数量", "申请续费课包总价", "续费课包课单价", "额外加码赠课", "备注情况说明", "更新时间"]
+  ];
+  getFiltered().forEach((item) => {
+    rows.push([
+      item.studentId, item.lp, item.newSignChannel, item.continent, item.renewType,
+      item.newPackageTotal, item.newLessonPrice, item.newBeans,
+      item.renewPackageTotal, item.renewLessonPrice, item.extraGiftLessons,
+      item.note, formatDate(item.updatedAt)
+    ]);
+  });
+  const csv = rows.map((row) => row.map((value) => `"${String(value ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `student-renewal-stats_${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function metric(label, value) {
+  return `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`;
+}
+
+function setSync(text) {
+  els.sync.textContent = text;
+}
+
+function toast(message, isError = false) {
+  els.toast.textContent = message;
+  els.toast.style.background = isError ? "#b42318" : "#101828";
+  els.toast.classList.add("show");
+  window.clearTimeout(toast.timer);
+  toast.timer = window.setTimeout(() => els.toast.classList.remove("show"), 1800);
+}
+
+function toNumber(value) {
+  return Number(value || 0);
+}
+
+function sumBy(records, key) {
+  return records.reduce((sum, item) => sum + Number(item[key] || 0), 0);
+}
+
+function avgBy(records, key) {
+  return records.length ? sumBy(records, key) / records.length : 0;
+}
+
+function groupBy(records, key) {
+  return records.reduce((map, item) => {
+    const label = item[key] || "未填写";
+    map[label] ||= [];
+    map[label].push(item);
+    return map;
+  }, {});
+}
+
+function countBy(records, key) {
+  return records.reduce((map, item) => {
+    const label = item[key] || "未填写";
+    map[label] = (map[label] || 0) + 1;
+    return map;
+  }, {});
+}
+
+function amountBy(records, groupKey, amountKey) {
+  return records.reduce((map, item) => {
+    const label = item[groupKey] || "未填写";
+    map[label] = (map[label] || 0) + Number(item[amountKey] || 0);
+    return map;
+  }, {});
+}
+
+function money(value) {
+  return Number(value || 0).toLocaleString("zh-CN", {
+    style: "currency",
+    currency: "CNY",
+    maximumFractionDigits: 2
+  });
+}
+
+function plainNumber(value) {
+  return Number(value || 0).toLocaleString("zh-CN", { maximumFractionDigits: 2 });
+}
+
+function formatDate(value) {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("zh-CN", { hour12: false });
+}
+
+function formatTime(value) {
+  return value.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+loadRecords(false);
