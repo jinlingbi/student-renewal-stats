@@ -1,12 +1,3 @@
-好的，下面这份是干净版。你在 GitHub 里新建文件：
-
-```text
-netlify/functions/records.js
-```
-
-然后把下面全部内容复制进去：
-
-```js
 import { getStore } from "@netlify/blobs";
 
 const STORE_NAME = "student-renewal-records";
@@ -96,6 +87,7 @@ function normalizeRecord(payload) {
     renewPackageTotal: number(payload.renewPackageTotal),
     renewLessonPrice: number(payload.renewLessonPrice),
     extraGiftLessons: number(payload.extraGiftLessons),
+    note: clean(payload.note),
     updatedAt: new Date().toISOString()
   };
 }
@@ -135,4 +127,3 @@ function response(statusCode, body) {
     body: statusCode === 204 ? "" : JSON.stringify(body)
   };
 }
-```
